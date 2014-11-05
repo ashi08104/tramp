@@ -991,11 +991,20 @@ PRESERVE-UID-GID and PRESERVE-EXTENDED-ATTRIBUTES are completely ignored."
 	  (tramp-set-connection-property v "process-buffer" nil))))))
 
 ;; Helper functions.
+(defun tramp-adb-get-host-for-execution (vec)
+  "Returns host name and port from VEC to be used in shell exceution.
+E.g. a host name \"192.168.1.1#5555\" returns \"192.168.1.1:5555\"
+     a host name \"R38273882DE\" returns \"R38273882DE\"."
+  (if (tramp-file-name-port vec)
+      (format
+       "%s:%s" (tramp-file-name-real-host vec) (tramp-file-name-port vec))
+    (tramp-file-name-host vec)))
 
 (defun tramp-adb-execute-adb-command (vec &rest args)
   "Returns nil on success error-output on failure."
-  (when (> (length (tramp-file-name-host vec)) 0)
-    (setq args (append (list "-s" (tramp-file-name-host vec)) args)))
+  (let ((host (tramp-file-name-host vec)))
+    (when (> (length host) 0)
+      (setq args (append (list "-s" (tramp-adb-get-host-for-execution vec)) args))))
   (with-temp-buffer
     (prog1
 	(unless
@@ -1097,6 +1106,7 @@ connection if a previous connection has died for some reason."
   (let* ((buf (tramp-get-connection-buffer vec))
 	 (p (get-buffer-process buf))
 	 (host (tramp-file-name-host vec))
+         (exe-host (tramp-adb-get-host-for-execution vec))
 	 (user (tramp-file-name-user vec))
 	 devices)
 
@@ -1113,7 +1123,7 @@ connection if a previous connection has died for some reason."
 	(setq devices (mapcar 'cadr (tramp-adb-parse-device-names nil)))
 	(if (not devices)
 	    (tramp-error vec 'file-error "No device connected"))
-	(if (and (> (length host) 0) (not (member host devices)))
+	(if (and (> (length host) 0) (not (member exe-host devices)))
 	    (tramp-error vec 'file-error "Device %s not connected" host))
 	(if (and (> (length devices) 1) (zerop (length host)))
 	    (tramp-error
@@ -1123,7 +1133,7 @@ connection if a previous connection has died for some reason."
 	  (let* ((coding-system-for-read 'utf-8-dos) ;is this correct?
 		 (process-connection-type tramp-process-connection-type)
 		 (args (if (> (length host) 0)
-			   (list "-s" host "shell")
+			   (list "-s" exe-host "shell")
 			 (list "shell")))
 		 (p (let ((default-directory
 			    (tramp-compat-temporary-file-directory)))
