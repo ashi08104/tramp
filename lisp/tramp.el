@@ -785,6 +785,12 @@ Derived from `tramp-postfix-user-format'.")
 (defconst tramp-host-regexp "[a-zA-Z0-9_.-]+"
   "Regexp matching host names.")
 
+;; The following regexp is a big sloppy. But it should be OK
+;; to detect the difference between x.x.x.x and xxxx patterns.
+(defconst tramp-ipv4-regexp
+  "[0-9]+\.[0-9]+.[0-9]+.[0-9]+"
+  "Regexp matching ipv4 address.")
+
 (defconst tramp-prefix-ipv6-format
   (cond ((equal tramp-syntax 'ftp) "[")
 	((equal tramp-syntax 'sep) "")
@@ -1203,6 +1209,12 @@ If the `tramp-methods' entry does not exist, return nil."
   (save-match-data
     (and (stringp name)
 	 (string-match tramp-file-name-regexp name))))
+
+(defun tramp-ipv4-addr-p (name)
+  "Return t if NAME is a string with IP address syntax."
+  (save-match-data
+    (and (stringp name)
+         (string-match tramp-ipv4-regexp name))))
 
 ;; Obsoleted with Tramp 2.2.7.
 (defconst tramp-obsolete-methods

@@ -995,10 +995,18 @@ PRESERVE-UID-GID and PRESERVE-EXTENDED-ATTRIBUTES are completely ignored."
   "Returns host name and port from VEC to be used in shell exceution.
 E.g. a host name \"192.168.1.1#5555\" returns \"192.168.1.1:5555\"
      a host name \"R38273882DE\" returns \"R38273882DE\"."
-  (if (tramp-file-name-port vec)
-      (format
-       "%s:%s" (tramp-file-name-real-host vec) (tramp-file-name-port vec))
-    (tramp-file-name-host vec)))
+  (let ((port (tramp-file-name-port vec))
+        (host (tramp-file-name-real-host vec)))
+    (if port
+        ;; When port is provided, check whether ADB is in TCP mode.
+        (if (tramp-ipv4-addr-p host)
+            (format
+             "%s:%s" host port)
+          ;; TODO Tramp doesn't show the message here, what's the proper way
+          ;; showing message to user?
+          (tramp-error
+           vec 'file-error "ADB USB mode needs not port number"))
+      host)))
 
 (defun tramp-adb-execute-adb-command (vec &rest args)
   "Returns nil on success error-output on failure."
