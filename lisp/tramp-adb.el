@@ -991,22 +991,39 @@ PRESERVE-UID-GID and PRESERVE-EXTENDED-ATTRIBUTES are completely ignored."
 	  (tramp-set-connection-property v "process-buffer" nil))))))
 
 ;; Helper functions.
+(defun tramp-adb-get-host-port-from-device-name (host device-names)
+  "Returns host:name string by searching host in the device-names list. If
+failed, return nil"
+  (if (null device-names) nil
+    (if (string-match host (car device-names))
+        (car device-names)
+      (tramp-adb-get-host-port-from-device-name (host (cdr device-names))))))
+
 (defun tramp-adb-get-host-for-execution (vec)
   "Returns host name and port from VEC to be used in shell exceution.
 E.g. a host name \"192.168.1.1#5555\" returns \"192.168.1.1:5555\"
      a host name \"R38273882DE\" returns \"R38273882DE\"."
   (let ((port (tramp-file-name-port vec))
         (host (tramp-file-name-real-host vec)))
-    (if port
-        ;; When port is provided, check whether ADB is in TCP mode.
-        (if (tramp-ipv4-addr-p host)
-            (format
-             "%s:%s" host port)
+    ;; Check ADB is in which kind mode: TCP mode or USB mode by the host name
+    (if (tramp-ipv4-addr-p host)
+        ;; In TCP mode, if port is provided, get port from ADB devices command
+        (if port
+            (format "%s:%s" host port)
+          ;; If port is not provided, get host:port from device-names
+          (let ((host-port (tramp-adb-get-host-port-from-device-name
+                            host (mapcar
+                                  'cadr
+                                  (tramp-adb-parse-device-names nil)))))
+            (if host-port
+                host-port
+              (tramp-error vec 'file-error "Couldn't find device"))))
+      ;; In USB mode, no port is needed.
+      (if port
           ;; TODO Tramp doesn't show the message here, what's the proper way
           ;; showing message to user?
-          (tramp-error
-           vec 'file-error "ADB USB mode needs not port number"))
-      host)))
+          (tramp-error vec 'file-error "ADB USB mode needs not port number")
+        host))))
 
 (defun tramp-adb-execute-adb-command (vec &rest args)
   "Returns nil on success error-output on failure."

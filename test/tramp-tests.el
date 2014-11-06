@@ -1165,8 +1165,7 @@ This tests also `make-symbolic-link', `file-truename' and `add-name-to-file'."
 	  (skip-unless (set-file-times tmp-name1 '(0 1)))
 	  ;; Dumb remote shells without perl(1) or stat(1) are not
 	  ;; able to return the date correctly.  They say "don't know".
-	  (unless (or (equal (nth 5 (file-attributes tmp-name1)) '(0 0))
-                      (equal (nth 4 (file-attributes tmp-name1)) '(0 0)))
+	  (unless (equal (nth 5 (file-attributes tmp-name1)) '(0 0))
 	    (should (equal (nth 5 (file-attributes tmp-name1)) '(0 1)))
 	    (write-region "bla" nil tmp-name2)
 	    (should (file-exists-p tmp-name2))
