@@ -45,6 +45,13 @@
   :version "24.4"
   :type 'string)
 
+(defcustom tramp-adb-connect-if-not-connected nil
+  "Try to run adb connect if provided device is not connected currently. It is
+in tramp-adb-get-host-for-execution."
+  :group 'tramp
+  :version "24.4"
+  :type '(choice (const nil) (const t)))
+
 ;;;###tramp-autoload
 (defconst tramp-adb-method "adb"
   "*When this method name is used, forward all calls to Android Debug Bridge.")
@@ -991,39 +998,54 @@ PRESERVE-UID-GID and PRESERVE-EXTENDED-ATTRIBUTES are completely ignored."
 	  (tramp-set-connection-property v "process-buffer" nil))))))
 
 ;; Helper functions.
-(defun tramp-adb-get-host-port-from-device-name (host device-names)
-  "Returns host:name string by searching host in the device-names list. If
-failed, return nil"
-  (if (null device-names) nil
-    (if (string-match host (car device-names))
-        (car device-names)
-      (tramp-adb-get-host-port-from-device-name (host (cdr device-names))))))
+(defun tramp-adb-search-host-in-devices (host devices)
+  "Returns host:port string by searching host in the devices list. If
+failed, return nil."
+  (if (null devices) nil
+    (if (string-match (concat "^" host) (car devices))
+        (car devices)
+      (tramp-adb-search-host-in-devices host (cdr devices)))))
 
 (defun tramp-adb-get-host-for-execution (vec)
-  "Returns host name and port from VEC to be used in shell exceution.
+  "Returns full host name from VEC to be used in shell exceution.
 E.g. a host name \"192.168.1.1#5555\" returns \"192.168.1.1:5555\"
      a host name \"R38273882DE\" returns \"R38273882DE\"."
-  (let ((port (tramp-file-name-port vec))
-        (host (tramp-file-name-real-host vec)))
-    ;; Check ADB is in which kind mode: TCP mode or USB mode by the host name
-    (if (tramp-ipv4-addr-p host)
-        ;; In TCP mode, if port is provided, get port from ADB devices command
-        (if port
-            (format "%s:%s" host port)
-          ;; If port is not provided, get host:port from device-names
-          (let ((host-port (tramp-adb-get-host-port-from-device-name
-                            host (mapcar
-                                  'cadr
-                                  (tramp-adb-parse-device-names nil)))))
-            (if host-port
-                host-port
-              (tramp-error vec 'file-error "Couldn't find device"))))
-      ;; In USB mode, no port is needed.
-      (if port
-          ;; TODO Tramp doesn't show the message here, what's the proper way
-          ;; showing message to user?
-          (tramp-error vec 'file-error "ADB USB mode needs not port number")
-        host))))
+  (let* ((port (tramp-file-name-port vec))
+         (host (tramp-file-name-real-host vec))
+         (exe-name (if port
+                       (format "%s:%s" host port)
+                     host))
+         (devices (mapcar 'cadr (tramp-adb-parse-device-names nil))))
+    ;; Checking whether exe-name is in devices. Follow cases are checked:
+    ;;  - yes, correct exe-name returns.
+    ;;  - not, true device name is: xxxx
+    ;;    user types: xxxx:port-number. Error returns with tips of correct name
+    ;;  - not, true device name is: xxxx:port-number
+    ;;    user types: xxxx. Tramp will auto-complete port-number for user
+    ;;  - not, no device name is similar as user gives. if
+    ;;    tramp-adb-connect-if-not-connected is t, try to connect that device,
+    ;;    else return error
+    (cond ((member exe-name devices) exe-name)
+          ((member host devices) (tramp-error
+                                  vec 'file-error
+                                  "Port number is not needed for device %s"
+                                  host))
+          ((tramp-adb-search-host-in-devices host devices))
+          (tramp-adb-connect-if-not-connected
+           ;; Try to connect exe-name device.
+           (if (tramp-adb-execute-adb-command
+                '["adb" nil "" "/" nil] "connect" exe-name)
+               (tramp-error vec 'file-error "Could not connect %s" exe-name)
+             ;; If port is not provided, adb will connect to default port number
+             ;; 5555, which must be appended to return to get a full host name.
+             (if port
+                 exe-name
+               (format "%s:%s" host "5555"))))
+          (t (tramp-error
+              vec
+              'file-error
+              "Could not find device %s"
+              exe-name)))))
 
 (defun tramp-adb-execute-adb-command (vec &rest args)
   "Returns nil on success error-output on failure."
