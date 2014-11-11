@@ -1155,8 +1155,10 @@ connection if a previous connection has died for some reason."
 	 (host (tramp-file-name-host vec))
          (exe-host (tramp-adb-get-host-for-execution vec))
 	 (user (tramp-file-name-user vec))
-	 devices)
-
+         ;; Adding the exe-host to devices ensures a new connected exe-host
+         ;; is in devices. Because tramp-adb-parse-device-names can't
+         ;; discover new connected device.
+	 (devices (list exe-host)))
     ;; Maybe we know already that "su" is not supported.  We cannot
     ;; use a connection property, because we have not checked yet
     ;; whether it is still the same device.
@@ -1167,7 +1169,7 @@ connection if a previous connection has died for some reason."
 	(and p (processp p) (memq (process-status p) '(run open)))
       (save-match-data
 	(when (and p (processp p)) (delete-process p))
-	(setq devices (mapcar 'cadr (tramp-adb-parse-device-names nil)))
+	(append devices (mapcar 'cadr (tramp-adb-parse-device-names nil)))
 	(if (not devices)
 	    (tramp-error vec 'file-error "No device connected"))
 	(if (and (> (length host) 0) (not (member exe-host devices)))
