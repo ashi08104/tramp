@@ -46,11 +46,11 @@
   :type 'string)
 
 (defcustom tramp-adb-connect-if-not-connected nil
-  "Try to run adb connect if provided device is not connected currently. It is
-in tramp-adb-get-host-for-execution."
+  "Try to run adb connect if provided device is not connected currently.
+It is used in `tramp-adb-get-host-for-execution'."
   :group 'tramp
-  :version "24.4"
-  :type '(choice (const nil) (const t)))
+  :version "24.5"
+  :type 'boolean)
 
 ;;;###tramp-autoload
 (defconst tramp-adb-method "adb"
@@ -78,7 +78,8 @@ in tramp-adb-get-host-for-execution."
 ;;;###tramp-autoload
 (add-to-list 'tramp-methods
 	     `(,tramp-adb-method
-	       (tramp-tmpdir "/data/local/tmp")))
+	       (tramp-tmpdir "/data/local/tmp")
+               (tramp-default-adb-port "5555")))
 
 ;;;###tramp-autoload
 (add-to-list 'tramp-default-host-alist `(,tramp-adb-method nil ""))
@@ -999,19 +1000,20 @@ PRESERVE-UID-GID and PRESERVE-EXTENDED-ATTRIBUTES are completely ignored."
 
 ;; Helper functions.
 (defun tramp-adb-search-host-in-devices (host devices)
-  "Returns host:port string by searching host in the devices list. If
-failed, return nil."
+  "Return host:port string by searching HOST in DEVICES.
+If failed, return nil."
   (if (null devices) nil
     (if (string-match (concat "^" host) (car devices))
         (car devices)
       (tramp-adb-search-host-in-devices host (cdr devices)))))
 
 (defun tramp-adb-get-host-for-execution (vec)
-  "Returns full host name from VEC to be used in shell exceution.
+  "Return full host name from VEC to be used in shell exceution.
 E.g. a host name \"192.168.1.1#5555\" returns \"192.168.1.1:5555\"
      a host name \"R38273882DE\" returns \"R38273882DE\"."
   (let* ((port (tramp-file-name-port vec))
          (host (tramp-file-name-real-host vec))
+         (method (tramp-file-name-method vec))
          (exe-name (if port
                        (format "%s:%s" host port)
                      host))
@@ -1034,13 +1036,17 @@ E.g. a host name \"192.168.1.1#5555\" returns \"192.168.1.1:5555\"
           (tramp-adb-connect-if-not-connected
            ;; Try to connect exe-name device.
            (if (tramp-adb-execute-adb-command
-                '["adb" nil "" "/" nil] "connect" exe-name)
+                vec "connect" exe-name)
                (tramp-error vec 'file-error "Could not connect %s" exe-name)
-             ;; If port is not provided, adb will connect to default port number
-             ;; 5555, which must be appended to return to get a full host name.
+             ;; If port is not provided, adb will connect to default port
+             ;; number, which must be appended to return to get a full host
+             ;; name.
              (if port
                  exe-name
-               (format "%s:%s" host "5555"))))
+               (format "%s:%s"
+                       host
+                       (tramp-get-method-parameter
+                        method 'tramp-default-adb-port)))))
           (t (tramp-error
               vec
               'file-error
@@ -1050,7 +1056,11 @@ E.g. a host name \"192.168.1.1#5555\" returns \"192.168.1.1:5555\"
 (defun tramp-adb-execute-adb-command (vec &rest args)
   "Returns nil on success error-output on failure."
   (let ((host (tramp-file-name-host vec)))
-    (when (> (length host) 0)
+    (when (and (> (length host) 0)
+               ;; The -s switch is only available for ADB device commands.
+               (not (member
+                     (car args)
+                     (list "connect" "disconnect" "devices"))))
       (setq args (append (list "-s" (tramp-adb-get-host-for-execution vec)) args))))
   (with-temp-buffer
     (prog1
