@@ -87,7 +87,7 @@ It is used in `tramp-adb-get-host-for-execution'."
 ;;;###tramp-autoload
 (eval-after-load 'tramp
   '(tramp-set-completion-function
-    tramp-adb-method '((tramp-adb-parse-device-names ""))))
+    tramp-adb-method '((tramp-adb-parse-device-names-for-completion ""))))
 
 ;;;###tramp-autoload
 (add-to-list 'tramp-foreign-file-name-handler-alist
@@ -200,6 +200,24 @@ pass to the OPERATION."
 	(while (search-forward-regexp "^\\(\\S-+\\)[[:space:]]+device$" nil t)
 	  (add-to-list 'result (list nil (match-string 1))))
 	result))))
+
+(defun tramp-adb-parse-device-names-for-completion (_ignore)
+  "Return a list of (nil host) tuples allowed to access.
+The difference between tramp-adb-parse-device-names and this function is:
+this function will replace : to # in device name"
+  (let ((devices (mapcar 'cadr (tramp-adb-parse-device-names nil)))
+        result)
+    (mapcar (lambda (str)
+              "Replace : in string to #"
+              (let* ((pos (string-match ":" str))
+                     (replaced-str
+                      (if pos
+                          (progn
+                            (aset str pos ?#)
+                            str)
+                        str)))
+                (list nil replaced-str)))
+            devices)))
 
 (defun tramp-adb-handle-expand-file-name (name &optional dir)
   "Like `expand-file-name' for Tramp files."
